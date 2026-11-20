@@ -1,0 +1,363 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API for the shared agency task board
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: users
+    description: Current user and team management
+  - name: tasks
+    description: Shared task board
+  - name: realtime
+    description: Live board updates
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /users/me:
+    post:
+      operationId: ensureCurrentUser
+      tags: [users]
+      summary: Create or refresh the signed-in user's board profile
+      description: The first authenticated user becomes the admin; later users become members.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserSyncInput"
+      responses:
+        "200":
+          description: Current user's role and profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMember"
+        "400":
+          description: Invalid profile data
+        "401":
+          description: Authentication required
+  /team:
+    get:
+      operationId: listTeamMembers
+      tags: [users]
+      summary: List people who have joined the board
+      responses:
+        "200":
+          description: Team members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamMember"
+        "401":
+          description: Authentication required
+        "409":
+          description: Current user profile is not set up
+  /team/{userId}/role:
+    patch:
+      operationId: updateTeamMemberRole
+      tags: [users]
+      summary: Change a team member's role
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdate"
+      responses:
+        "200":
+          description: Updated team member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMember"
+        "400":
+          description: Invalid role update
+        "401":
+          description: Authentication required
+        "403":
+          description: Admin role required
+        "404":
+          description: Team member not found
+        "409":
+          description: The board must retain an admin and the user profile must be set up
+  /tasks:
+    get:
+      operationId: listTasks
+      tags: [tasks]
+      summary: List tasks, optionally filtered by assignee
+      parameters:
+        - name: assigneeId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Board tasks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Task"
+        "401":
+          description: Authentication required
+        "409":
+          description: Current user profile is not set up
+    post:
+      operationId: createTask
+      tags: [tasks]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskInput"
+      responses:
+        "201":
+          description: Created task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: Invalid task
+        "401":
+          description: Authentication required
+        "409":
+          description: Current user profile is not set up
+  /tasks/summary:
+    get:
+      operationId: getBoardSummary
+      tags: [tasks]
+      summary: Summarize task counts and overdue work
+      responses:
+        "200":
+          description: Board overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BoardSummary"
+        "401":
+          description: Authentication required
+        "409":
+          description: Current user profile is not set up
+  /tasks/{taskId}:
+    patch:
+      operationId: updateTask
+      tags: [tasks]
+      summary: Edit a task or move it to another column
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskUpdate"
+      responses:
+        "200":
+          description: Updated task
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Task"
+        "400":
+          description: Invalid task
+        "401":
+          description: Authentication required
+        "404":
+          description: Task not found
+        "409":
+          description: Current user profile is not set up
+    delete:
+      operationId: deleteTask
+      tags: [tasks]
+      summary: Delete a task
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Task deleted
+        "401":
+          description: Authentication required
+        "409":
+          description: Current user profile is not set up
+        "403":
+          description: Admin role required
+        "404":
+          description: Task not found
+  /events:
+    get:
+      operationId: streamBoardEvents
+      tags: [realtime]
+      summary: Subscribe to board changes
+      description: Server-sent events stream. Clients should refetch board data after receiving a board-change event; EventSource reconnects automatically.
+      responses:
+        "200":
+          description: Server-sent events
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "401":
+          description: Authentication required
+        "409":
+          description: Current user profile is not set up
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    TeamMember:
+      type: object
+      required: [id, email, name, role, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, member]
+        createdAt:
+          type: string
+          format: date-time
+    UserSyncInput:
+      type: object
+      required: [email, name]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+          minLength: 1
+    RoleUpdate:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+    Task:
+      type: object
+      required: [id, title, description, status, assigneeId, assigneeName, dueDate, createdById, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        assigneeId:
+          type: [string, "null"]
+        assigneeName:
+          type: [string, "null"]
+        dueDate:
+          type: [string, "null"]
+          format: date
+        createdById:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TaskInput:
+      type: object
+      required: [title, description, status]
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        assigneeId:
+          type: [string, "null"]
+        dueDate:
+          type: [string, "null"]
+          format: date
+    TaskUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        status:
+          type: string
+          enum: [todo, in_progress, done]
+        assigneeId:
+          type: [string, "null"]
+        dueDate:
+          type: [string, "null"]
+          format: date
+    BoardSummary:
+      type: object
+      required: [total, overdue, byStatus]
+      properties:
+        total:
+          type: integer
+        overdue:
+          type: integer
+        byStatus:
+          type: object
+          required: [todo, in_progress, done]
+          properties:
+            todo:
+              type: integer
+            in_progress:
+              type: integer
+            done:
+              type: integer
+

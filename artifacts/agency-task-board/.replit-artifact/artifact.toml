@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Agency Task Board"
+description = "A shared task board for a small marketing agency, with member accounts, admin-controlled roles, task assignments, due dates, and real-time collaboration."
+version = "1.0.0"
+id = "artifacts/agency-task-board"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22040
+
+[services.development]
+run = "pnpm --filter @workspace/agency-task-board run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/agency-task-board", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/agency-task-board/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22040"
+BASE_PATH = "/"
